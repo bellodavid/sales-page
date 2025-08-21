@@ -1,13 +1,17 @@
-// Zapier Integration Configuration
+// Backend Configuration
 const CONFIG = {
-  // Zapier webhook URL - Replace with your actual webhook
-  ZAPIER_WEBHOOK: "https://hooks.zapier.com/hooks/catch/YOUR_WEBHOOK_ID",
+  // PHP Backend URL - automatically detects local vs production
+  PHP_BACKEND:
+    window.location.hostname === "localhost" ||
+    window.location.hostname.includes("127.0.0.1")
+      ? "http://localhost:8000/backend/subscribe.php" // Local development with PHP server
+      : "/backend/subscribe.php", // Production relative path
 
-  // Book download URL (optional - can be sent via email)
-  BOOK_DOWNLOAD_URL: "https://your-site.com/downloads/invisible-workforce.pdf",
+  // Book download URL
+  BOOK_DOWNLOAD_URL: "https://tinyurl.com/mw7vmyx3",
 
   // Integration method
-  INTEGRATION_METHOD: "zapier",
+  INTEGRATION_METHOD: "php",
 };
 
 // DOM Elements
@@ -301,22 +305,24 @@ async function enhancedFormValidation(event) {
   submitButton.disabled = true;
 
   try {
-    // Send data to Zapier
-    await sendToZapier({
+    // Send data to PHP backend
+    const response = await sendToPHP({
       firstName,
       email,
       phoneNumber,
       countryCode,
       country: countryCode.split("-")[1], // Extract country code
       fullPhone: countryCode.split("-")[0] + phoneNumber,
-      timestamp: new Date().toISOString(),
-      source: "invisible-workforce-landing",
-      bookTitle: "The Invisible Workforce",
-      downloadUrl: CONFIG.BOOK_DOWNLOAD_URL,
     });
 
-    // Enhanced success message
-    showEnhancedSuccessMessage(firstName);
+    // Check if we're in local mode
+    const isLocal =
+      window.location.protocol === "file:" ||
+      (window.location.hostname === "localhost" && !window.location.port) ||
+      window.location.hostname === "";
+
+    // Enhanced success message with response data
+    showEnhancedSuccessMessage(response.firstName || firstName, isLocal);
 
     // Update counters
     downloadCount++;
@@ -328,28 +334,72 @@ async function enhancedFormValidation(event) {
     emailForm.reset();
   } catch (error) {
     console.error("Subscription error:", error);
-    showUrgentAlert("⚠️ Something went wrong. Please try again in a moment.");
+    showUrgentAlert(
+      "⚠️ " +
+        (error.message || "Something went wrong. Please try again in a moment.")
+    );
   } finally {
     submitButton.textContent = originalText;
     submitButton.disabled = false;
   }
 }
 
-// Send data to Zapier webhook
-async function sendToZapier(data) {
-  const response = await fetch(CONFIG.ZAPIER_WEBHOOK, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(data),
-  });
+// Send data to PHP backend
+async function sendToPHP(data) {
+  // Check if running locally (file:// or localhost without web server)
+  const isLocal =
+    window.location.protocol === "file:" ||
+    (window.location.hostname === "localhost" && !window.location.port) ||
+    window.location.hostname === "";
 
-  if (!response.ok) {
-    throw new Error("Failed to submit form");
+  if (isLocal) {
+    // Simulate backend response for local development
+    console.log("Local development mode - simulating backend response");
+    console.log("Form data that would be sent:", data);
+
+    // Simulate processing delay
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    // Return simulated success response
+    return {
+      success: true,
+      message: "Welcome email sent successfully! (Local simulation)",
+      firstName: data.firstName,
+    };
   }
 
-  return response.json();
+  // Production/server mode - actual PHP backend call
+  try {
+    const response = await fetch(CONFIG.PHP_BACKEND, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(data),
+    });
+
+    const contentType = response.headers.get("content-type");
+    if (!contentType || !contentType.includes("application/json")) {
+      throw new Error(
+        "Server returned non-JSON response. Make sure PHP backend is properly configured."
+      );
+    }
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || "Failed to submit form");
+    }
+
+    return result;
+  } catch (error) {
+    if (error.message.includes("Failed to fetch")) {
+      throw new Error(
+        "Cannot connect to backend. Make sure you're running on a web server."
+      );
+    }
+    throw error;
+  }
 }
 
 // ConvertKit Integration
@@ -372,29 +422,6 @@ async function integrateWithConvertKit(email) {
       }),
     }
   );
-
-  if (!response.ok) {
-    throw new Error("Email subscription failed");
-  }
-
-  return response.json();
-}
-
-// Zapier Integration
-async function integrateWithZapier(email) {
-  const response = await fetch(CONFIG.ZAPIER_WEBHOOK, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      email: email,
-      book_title: "The Invisible Workforce",
-      download_url: CONFIG.BOOK_DOWNLOAD_URL,
-      source: "landing-page",
-      timestamp: new Date().toISOString(),
-    }),
-  });
 
   if (!response.ok) {
     throw new Error("Email subscription failed");
@@ -454,11 +481,19 @@ function showUrgentAlert(message) {
 }
 
 // Show enhanced success message with personalization
-function showEnhancedSuccessMessage(firstName = "") {
+function showEnhancedSuccessMessage(firstName = "", isLocalMode = false) {
   const ctaSection = document.getElementById("book-cta");
   const originalHTML = ctaSection.innerHTML;
 
   const personalGreeting = firstName ? `Hi ${firstName}! ` : "";
+
+  const localModeNotice = isLocalMode
+    ? `<div style="background: #ffeb3b; color: #333; padding: 1rem; border-radius: 8px; margin: 1rem 0;">
+       <strong>📍 Local Development Mode:</strong> Form submission simulated. 
+       Deploy to web server to test actual email sending.
+     </div>`
+    : "";
+
   const downloadSection =
     CONFIG.BOOK_DOWNLOAD_URL &&
     CONFIG.BOOK_DOWNLOAD_URL !==
@@ -476,8 +511,7 @@ function showEnhancedSuccessMessage(firstName = "") {
   ctaSection.innerHTML = `
     <div style="text-align: center; padding: 3rem 2rem;">
       <h2 style="color: #2aff9f;">🎉 SUCCESS! ${personalGreeting}Your Copy is On The Way!</h2>
-    <div style="text-align: center; padding: 3rem 2rem;">
-      <h2 style="color: #2aff9f;">🎉 SUCCESS! Your Copy is On The Way!</h2>
+      ${localModeNotice}
       <p style="font-size: 1.2rem; margin: 1rem 0;">
         <strong>Check your email in the next 2-3 minutes</strong> for your free copy of 
         "The Invisible Workforce" plus all bonus materials!

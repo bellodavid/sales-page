@@ -4,17 +4,41 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST');
 header('Access-Control-Allow-Headers: Content-Type');
 
-// Configuration
+// Load environment variables
+function loadEnv($file) {
+    if (!file_exists($file)) {
+        throw new Exception('.env file not found');
+    }
+    
+    $lines = file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    foreach ($lines as $line) {
+        if (strpos($line, '#') === 0) continue; // Skip comments
+        if (strpos($line, '=') === false) continue; // Skip invalid lines
+        
+        list($key, $value) = explode('=', $line, 2);
+        $key = trim($key);
+        $value = trim($value, " \t\n\r\0\x0B\"'"); // Remove quotes and whitespace
+        
+        if (!array_key_exists($key, $_ENV)) {
+            $_ENV[$key] = $value;
+        }
+    }
+}
+
+// Load .env file
+loadEnv(__DIR__ . '/.env');
+
+// Configuration from environment variables
 $CONFIG = [
-    'smtp_host' => 'mail.dbmansion.com', // Your SMTP server
-    'smtp_port' => 587,
-    'smtp_username' => 'hi@dbmansion.com', // Your email
-    'smtp_password' => 'DBMansion@1235.com', // Your app password
-    'from_email' => 'hi@dbmansion.com',
-    'from_name' => 'DBMansion Labs',
-    'book_url' => 'https://tinyurl.com/mw7vmyx3',
-    'community_url' => 'https://your-community-link.com', // Your community/Discord link
-    'csv_file' => 'subscribers.csv' // File to store subscriber data
+    'smtp_host' => $_ENV['SMTP_HOST'] ?? 'localhost',
+    'smtp_port' => (int)($_ENV['SMTP_PORT'] ?? 587),
+    'smtp_username' => $_ENV['SMTP_USERNAME'] ?? '',
+    'smtp_password' => $_ENV['SMTP_PASSWORD'] ?? '',
+    'from_email' => $_ENV['FROM_EMAIL'] ?? '',
+    'from_name' => $_ENV['FROM_NAME'] ?? 'Default Name',
+    'book_url' => $_ENV['BOOK_URL'] ?? '',
+    'community_url' => $_ENV['COMMUNITY_URL'] ?? '#',
+    'csv_file' => $_ENV['CSV_FILE'] ?? 'subscribers.csv'
 ];
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {

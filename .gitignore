@@ -1,0 +1,30 @@
+# Environment variables - NEVER commit these!
+backend/.env
+
+# Subscriber data - keep private
+backend/subscribers.csv
+
+# Composer dependencies
+backend/vendor/
+backend/composer.lock
+
+# System files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+*.tmp
+*.log
+
+# Node modules (if you ever add npm packages)
+node_modules/
+
+# Build files
+dist/
+build/

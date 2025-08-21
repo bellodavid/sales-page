@@ -1,0 +1,30 @@
+# Protect sensitive files
+<Files ".env">
+    Order Allow,Deny
+    Deny from all
+</Files>
+
+<Files ".env.*">
+    Order Allow,Deny
+    Deny from all
+</Files>
+
+<Files "subscribers.csv">
+    Order Allow,Deny
+    Deny from all
+</Files>
+
+<Files "composer.json">
+    Order Allow,Deny
+    Deny from all
+</Files>
+
+<Files "composer.lock">
+    Order Allow,Deny
+    Deny from all
+</Files>
+
+# Enable CORS for form submissions
+Header add Access-Control-Allow-Origin "*"
+Header add Access-Control-Allow-Headers "Content-Type"
+Header add Access-Control-Allow-Methods "POST"
