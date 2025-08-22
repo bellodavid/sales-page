@@ -7,6 +7,13 @@ const CONFIG = {
       ? "http://localhost:8000/backend/subscribe.php" // Local development with PHP server
       : "/backend/subscribe.php", // Production relative path
 
+  // Timer Backend URL
+  TIMER_BACKEND:
+    window.location.hostname === "localhost" ||
+    window.location.hostname.includes("127.0.0.1")
+      ? "http://localhost:8000/backend/timer.php" // Local development with PHP server
+      : "/backend/timer.php", // Production relative path
+
   // Book download URL
   BOOK_DOWNLOAD_URL: "https://tinyurl.com/mw7vmyx3",
 
@@ -137,56 +144,89 @@ function initializeScrollAnimations() {
 let downloadCount = 847;
 let remainingCopies = 153;
 
-// Countdown Timer with auto-restart
-function initializeCountdown() {
-  let endTime = new Date().getTime() + 24 * 60 * 60 * 1000; // 24 hours from now
+// Countdown Timer - Synced with Backend
+let countdownInterval;
 
-  function updateCountdown() {
-    const now = new Date().getTime();
-    const timeLeft = endTime - now;
-
-    if (timeLeft > 0) {
-      const hours = Math.floor(timeLeft / (1000 * 60 * 60));
-      const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
-      const seconds = Math.floor((timeLeft % (1000 * 60)) / 1000);
-
-      document.getElementById("hours").textContent = hours
-        .toString()
-        .padStart(2, "0");
-      document.getElementById("minutes").textContent = minutes
-        .toString()
-        .padStart(2, "0");
-      document.getElementById("seconds").textContent = seconds
-        .toString()
-        .padStart(2, "0");
-    } else {
-      // Timer expired - restart with new 24-hour period
-      endTime = new Date().getTime() + 24 * 60 * 60 * 1000;
-
-      // Flash effect to indicate timer reset
-      const timerContainer = document.querySelector(".countdown-container");
-      if (timerContainer) {
-        timerContainer.style.animation = "flash-reset 0.5s ease-in-out";
-        setTimeout(() => {
-          timerContainer.style.animation = "";
-        }, 500);
-      }
-
-      // Update the timer text briefly to show it's reset
-      const timerHeading = timerContainer.querySelector("h3");
-      const originalText = timerHeading.textContent;
-      timerHeading.textContent = "🔄 OFFER EXTENDED - NEW 24 HOURS!";
-      timerHeading.style.color = "#2aff9f";
-
-      setTimeout(() => {
-        timerHeading.textContent = originalText;
-        timerHeading.style.color = "";
-      }, 3000);
+async function fetchCountdownData() {
+  try {
+    const response = await fetch(CONFIG.TIMER_BACKEND);
+    const data = await response.json();
+    
+    if (data.success) {
+      updateCountdownDisplay(data.countdown);
+      updateStatsFromServer(data.stats);
+      return data.countdown.totalSeconds;
     }
+  } catch (error) {
+    console.log('Timer fetch failed, using local countdown');
+    // Fallback to local countdown if backend fails
+    return null;
   }
+}
 
-  updateCountdown();
-  setInterval(updateCountdown, 1000);
+function updateCountdownDisplay(countdown) {
+  const hours = document.getElementById("hours");
+  const minutes = document.getElementById("minutes");
+  const seconds = document.getElementById("seconds");
+  
+  if (hours) hours.textContent = countdown.hours.toString().padStart(2, "0");
+  if (minutes) minutes.textContent = countdown.minutes.toString().padStart(2, "0");
+  if (seconds) seconds.textContent = countdown.seconds.toString().padStart(2, "0");
+}
+
+function updateStatsFromServer(stats) {
+  const downloadCounter = document.getElementById("download-counter");
+  const remainingCopies = document.getElementById("remaining-copies");
+  
+  if (downloadCounter) downloadCounter.textContent = stats.downloadCount;
+  if (remainingCopies) remainingCopies.textContent = stats.remainingCopies;
+  
+  // Update global variables
+  downloadCount = stats.downloadCount;
+  remainingCopies = stats.remainingCopies;
+}
+
+function startLocalCountdown(initialSeconds = null) {
+  let totalSeconds = initialSeconds || (23 * 3600 + 47 * 60 + 32); // Default fallback
+  
+  countdownInterval = setInterval(() => {
+    if (totalSeconds <= 0) {
+      // Timer expired - try to fetch new time from server
+      fetchCountdownData().then(newSeconds => {
+        if (newSeconds) {
+          clearInterval(countdownInterval);
+          startLocalCountdown(newSeconds);
+        } else {
+          totalSeconds = 24 * 3600; // Reset to 24 hours as fallback
+        }
+      });
+      return;
+    }
+    
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    
+    updateCountdownDisplay({ hours, minutes, seconds });
+    totalSeconds--;
+  }, 1000);
+}
+
+async function initializeCountdown() {
+  // Try to get initial data from backend
+  const serverSeconds = await fetchCountdownData();
+  
+  // Start local countdown with server time or fallback
+  startLocalCountdown(serverSeconds);
+  
+  // Sync with server every 5 minutes
+  setInterval(async () => {
+    const newServerSeconds = await fetchCountdownData();
+    if (newServerSeconds !== null) {
+      clearInterval(countdownInterval);
+      startLocalCountdown(newServerSeconds);
+    }
+  }, 5 * 60 * 1000); // 5 minutes
 }
 
 // Social Proof Counter Animation
@@ -208,7 +248,7 @@ function animateCounter(elementId, target) {
   }, 20);
 }
 
-// Recent Activity Notifications
+// Recent Activity Notifications (now uses server stats as base)
 function showRecentActivity() {
   const names = [
     "Jennifer from Miami",
@@ -220,6 +260,9 @@ function showRecentActivity() {
     "Amy from Chicago",
     "John from Phoenix",
     "Kate from Atlanta",
+    "Maria from Dallas",
+    "Chris from Nashville",
+    "Emma from San Diego",
   ];
 
   const activityElement = document.getElementById("recent-activity");
@@ -230,15 +273,15 @@ function showRecentActivity() {
     activityElement.innerHTML = `<p>🔥 <strong>${randomName}</strong> just downloaded their copy</p>`;
     activityElement.classList.add("show");
 
-    // Update counters
-    downloadCount += Math.floor(Math.random() * 3) + 1;
-    remainingCopies = Math.max(
-      50,
-      remainingCopies - Math.floor(Math.random() * 2) - 1
-    );
+    // Only slightly increment local counters (server will provide real numbers)
+    downloadCount += Math.floor(Math.random() * 2) + 1;
+    remainingCopies = Math.max(50, remainingCopies - 1);
 
-    document.getElementById("download-counter").textContent = downloadCount;
-    document.getElementById("remaining-copies").textContent = remainingCopies;
+    // Update display if server sync hasn't happened recently
+    const downloadCounter = document.getElementById("download-counter");
+    const remainingCopiesEl = document.getElementById("remaining-copies");
+    if (downloadCounter) downloadCounter.textContent = downloadCount;
+    if (remainingCopiesEl) remainingCopiesEl.textContent = remainingCopies;
 
     setTimeout(() => {
       activityElement.classList.remove("show");
@@ -248,13 +291,8 @@ function showRecentActivity() {
   // Show first notification after 3 seconds
   setTimeout(showNotification, 3000);
 
-  // Then show notifications every 15-30 seconds
-  setInterval(() => {
-    if (Math.random() > 0.3) {
-      // 70% chance
-      showNotification();
-    }
-  }, Math.random() * 15000 + 15000);
+  // Show notifications every 15-45 seconds
+  setInterval(showNotification, Math.random() * 30000 + 15000);
 }
 
 // Enhanced form validation with complete data collection
