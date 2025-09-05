@@ -1,41 +1,44 @@
 # Protect sensitive files
+
 <Files ".env">
-    Order Allow,Deny
-    Deny from all
+Order Allow,Deny
+Deny from all
 </Files>
 
-<Files ".env.*">
-    Order Allow,Deny
-    Deny from all
+<Files ".env.\*">
+Order Allow,Deny
+Deny from all
 </Files>
 
 <Files "subscribers.csv">
-    Order Allow,Deny
-    Deny from all
+Order Allow,Deny
+Deny from all
 </Files>
 
 <Files "composer.json">
-    Order Allow,Deny
-    Deny from all
+Order Allow,Deny
+Deny from all
 </Files>
 
 <Files "composer.lock">
-    Order Allow,Deny
-    Deny from all
+Order Allow,Deny
+Deny from all
 </Files>
 
 # Allow access to PHP endpoints
+
 <Files "subscribe.php">
-    Order Allow,Deny
-    Allow from all
+Order Allow,Deny
+Allow from all
 </Files>
 
 <Files "timer.php">
-    Order Allow,Deny
-    Allow from all
+Order Allow,Deny
+Allow from all
 </Files>
 
 # Enable CORS for form submissions and API calls
-Header add Access-Control-Allow-Origin "*"
+
+Header add Access-Control-Allow-Origin "\*"
 Header add Access-Control-Allow-Headers "Content-Type"
 Header add Access-Control-Allow-Methods "GET, POST"

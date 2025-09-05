@@ -151,14 +151,14 @@ async function fetchCountdownData() {
   try {
     const response = await fetch(CONFIG.TIMER_BACKEND);
     const data = await response.json();
-    
+
     if (data.success) {
       updateCountdownDisplay(data.countdown);
       updateStatsFromServer(data.stats);
       return data.countdown.totalSeconds;
     }
   } catch (error) {
-    console.log('Timer fetch failed, using local countdown');
+    console.log("Timer fetch failed, using local countdown");
     // Fallback to local countdown if backend fails
     return null;
   }
@@ -168,31 +168,33 @@ function updateCountdownDisplay(countdown) {
   const hours = document.getElementById("hours");
   const minutes = document.getElementById("minutes");
   const seconds = document.getElementById("seconds");
-  
+
   if (hours) hours.textContent = countdown.hours.toString().padStart(2, "0");
-  if (minutes) minutes.textContent = countdown.minutes.toString().padStart(2, "0");
-  if (seconds) seconds.textContent = countdown.seconds.toString().padStart(2, "0");
+  if (minutes)
+    minutes.textContent = countdown.minutes.toString().padStart(2, "0");
+  if (seconds)
+    seconds.textContent = countdown.seconds.toString().padStart(2, "0");
 }
 
 function updateStatsFromServer(stats) {
   const downloadCounter = document.getElementById("download-counter");
   const remainingCopies = document.getElementById("remaining-copies");
-  
+
   if (downloadCounter) downloadCounter.textContent = stats.downloadCount;
   if (remainingCopies) remainingCopies.textContent = stats.remainingCopies;
-  
+
   // Update global variables
   downloadCount = stats.downloadCount;
   remainingCopies = stats.remainingCopies;
 }
 
 function startLocalCountdown(initialSeconds = null) {
-  let totalSeconds = initialSeconds || (23 * 3600 + 47 * 60 + 32); // Default fallback
-  
+  let totalSeconds = initialSeconds || 23 * 3600 + 47 * 60 + 32; // Default fallback
+
   countdownInterval = setInterval(() => {
     if (totalSeconds <= 0) {
       // Timer expired - try to fetch new time from server
-      fetchCountdownData().then(newSeconds => {
+      fetchCountdownData().then((newSeconds) => {
         if (newSeconds) {
           clearInterval(countdownInterval);
           startLocalCountdown(newSeconds);
@@ -202,11 +204,11 @@ function startLocalCountdown(initialSeconds = null) {
       });
       return;
     }
-    
+
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = totalSeconds % 60;
-    
+
     updateCountdownDisplay({ hours, minutes, seconds });
     totalSeconds--;
   }, 1000);
@@ -215,10 +217,10 @@ function startLocalCountdown(initialSeconds = null) {
 async function initializeCountdown() {
   // Try to get initial data from backend
   const serverSeconds = await fetchCountdownData();
-  
+
   // Start local countdown with server time or fallback
   startLocalCountdown(serverSeconds);
-  
+
   // Sync with server every 5 minutes
   setInterval(async () => {
     const newServerSeconds = await fetchCountdownData();
@@ -749,11 +751,160 @@ document.addEventListener("DOMContentLoaded", function () {
   // Initialize countdown timer
   initializeCountdown();
 
+  // Initialize wallet connection
+  initializeWalletConnection();
+
   // Start social proof features
   animateCounter("download-counter", downloadCount);
   animateCounter("remaining-copies", remainingCopies);
   showRecentActivity();
 });
+
+// Wallet Connection Functionality
+let walletConnected = false;
+
+async function initializeWalletConnection() {
+  const connectBtn = document.getElementById("connect-wallet-btn");
+  const walletStatus = document.getElementById("wallet-status");
+  const emailForm = document.getElementById("email-form");
+
+  if (!connectBtn || !walletStatus || !emailForm) return;
+
+  // Check if wallet is already connected
+  checkWalletConnection();
+
+  connectBtn.addEventListener("click", async () => {
+    if (walletConnected) {
+      disconnectWallet();
+    } else {
+      await connectWallet();
+    }
+  });
+
+  // Initially disable form if wallet not connected
+  toggleFormAccess();
+}
+
+async function connectWallet() {
+  const connectBtn = document.getElementById("connect-wallet-btn");
+  const walletStatus = document.getElementById("wallet-status");
+
+  connectBtn.textContent = "🔄 Connecting...";
+  connectBtn.disabled = true;
+
+  try {
+    // Check if MetaMask or other Web3 wallet is available
+    if (typeof window.ethereum !== "undefined") {
+      // Request account access
+      const accounts = await window.ethereum.request({
+        method: "eth_requestAccounts",
+      });
+
+      if (accounts.length > 0) {
+        walletConnected = true;
+        const shortAddress = `${accounts[0].slice(0, 6)}...${accounts[0].slice(
+          -4
+        )}`;
+
+        connectBtn.innerHTML = "✅ Connected: " + shortAddress;
+        walletStatus.innerHTML =
+          '<span class="wallet-connected">✅ Wallet connected! You can now claim your free book.</span>';
+
+        // Store connection in localStorage
+        localStorage.setItem("walletConnected", "true");
+        localStorage.setItem("walletAddress", accounts[0]);
+
+        toggleFormAccess();
+      }
+    } else {
+      // No Web3 wallet detected - provide alternative
+      showWalletInstallModal();
+    }
+  } catch (error) {
+    console.error("Wallet connection failed:", error);
+    connectBtn.textContent = "🔗 Connect Wallet First";
+    walletStatus.textContent = "Connection failed. Please try again.";
+  }
+
+  connectBtn.disabled = false;
+}
+
+function checkWalletConnection() {
+  const stored = localStorage.getItem("walletConnected");
+  const address = localStorage.getItem("walletAddress");
+
+  if (stored === "true" && address) {
+    walletConnected = true;
+    const connectBtn = document.getElementById("connect-wallet-btn");
+    const walletStatus = document.getElementById("wallet-status");
+
+    const shortAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
+    connectBtn.innerHTML = "✅ Connected: " + shortAddress;
+    walletStatus.innerHTML =
+      '<span class="wallet-connected">✅ Wallet connected! You can now claim your free book.</span>';
+  }
+}
+
+function toggleFormAccess() {
+  const emailForm = document.getElementById("email-form");
+  const submitBtn = emailForm.querySelector('button[type="submit"]');
+  const inputs = emailForm.querySelectorAll("input, select");
+
+  if (walletConnected) {
+    // Enable form
+    inputs.forEach((input) => (input.disabled = false));
+    submitBtn.disabled = false;
+    submitBtn.style.opacity = "1";
+    submitBtn.style.cursor = "pointer";
+    submitBtn.textContent = "SEND ME THE BOOK + BONUSES (FREE)";
+  } else {
+    // Disable form
+    inputs.forEach((input) => (input.disabled = true));
+    submitBtn.disabled = true;
+    submitBtn.style.opacity = "0.5";
+    submitBtn.style.cursor = "not-allowed";
+    submitBtn.textContent = "CONNECT WALLET FIRST";
+  }
+}
+
+function showWalletInstallModal() {
+  const modal = document.createElement("div");
+  modal.style.cssText = `
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.8); display: flex; align-items: center;
+    justify-content: center; z-index: 10000;
+  `;
+
+  modal.innerHTML = `
+    <div style="background: white; padding: 30px; border-radius: 15px; max-width: 400px; text-align: center; position: relative;">
+      <h3>🔗 Wallet Required for Secure Download</h3>
+      <p>To secure your free book download and protect against spam, please connect a Web3 wallet:</p>
+      <div style="margin: 20px 0;">
+        <a href="https://metamask.io" target="_blank" style="display: inline-block; background: #f6851b; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; margin: 8px;">🦊 Install MetaMask</a>
+        <br>
+        <button onclick="skipWalletConnection()" style="background: #2aff9f; color: white; border: none; padding: 12px 24px; border-radius: 8px; margin: 8px; cursor: pointer;">⚠️ Skip Wallet Protection</button>
+      </div>
+      <p style="font-size: 0.9em; color: #666;">Don't worry - this is just for verification. Your book is 100% free!</p>
+      <button onclick="this.parentElement.parentElement.remove()" style="position: absolute; top: 10px; right: 15px; background: none; border: none; font-size: 20px; cursor: pointer; color: #999;">×</button>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+}
+
+window.skipWalletConnection = function () {
+  walletConnected = true; // Allow access without wallet
+  document.querySelector('[style*="position: fixed"]')?.remove();
+
+  const connectBtn = document.getElementById("connect-wallet-btn");
+  const walletStatus = document.getElementById("wallet-status");
+
+  connectBtn.textContent = "⚠️ Proceeding without wallet";
+  walletStatus.innerHTML =
+    '<span style="color: orange;">⚠️ Proceeding without wallet protection</span>';
+
+  toggleFormAccess();
+};
 
 // Optional: Add keyboard navigation support
 document.addEventListener("keydown", function (event) {
